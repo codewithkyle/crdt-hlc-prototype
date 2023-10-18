@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Vector Clock Prototype</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        to-do {
+            width: 100%;
+            display: block;
+            position: relative;
+            margin-top: 16px;
+        }
+
+        to-do button {
+            margin-left: 8px;
+        }
+
+        body {
+            margin: 0;
+            padding: 32px;
+        }
+    </style>
+</head>
+
+<body>
+    <button id="add">Add TODO</button>
+    <div id="todos"></div>
+    <script type="module">
+        const add = document.getElementById('add');
+        const todos = document.getElementById('todos');
+        add.addEventListener('click', e => {
+            const newTODO = new ToDoElement();
+            todos.appendChild(newTODO);
+        });
+
+        const NODE_ID = localStorage.getItem('nodeId') || makeUUID();
+        localStorage.setItem('nodeId', NODE_ID);
+
+        let offlineQueue = [];
+
+        let socket = new WebSocket('ws://localhost:8080');
+        socket.addEventListener('open', e => {
+            console.log('connected');
+            while (offlineQueue.length > 0) {
+                const {uid, clock, value, type} = offlineQueue.shift();
+                dispatch(uid, clock, value, type);
+            }
+        });
+        socket.addEventListener('message', e => {
+            const data = JSON.parse(e.data);
+            const el = todos.querySelector(`[uid="${data.uid}"]`);
+            switch (data.type){
+                case 'create':
+                    const newTODO = new ToDoElement(data);
+                    todos.appendChild(newTODO);    
+                    break;
+                case 'delete':
+                    if (el) el.remove();
+                    return;
+                default:
+                    if (el) el.update(data);
+                    return;
+            }
+        });
+        socket.addEventListener('close', e => {
+            console.log('disconnected');
+            setTimeout(()=>{
+                console.log('reconnecting');
+                socket = new WebSocket('ws://localhost:8080');
+            }, 60_000);
+        });
+
+        function dispatch(uid, clock, value, type = 'update') {
+            if (socket.readyState !== 1) {
+                console.log('offline');
+                offlineQueue.push({uid, clock, value, type});
+                return;
+            }
+            socket.send(JSON.stringify({uid, clock, value, type}));
+        }
+
+        function makeUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+                const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        class ToDoElement extends HTMLElement {
+            constructor(data = null) {
+                super();
+                if (data != null) {
+                    this.uid = data.uid;
+                    this.clock = new VectorClock(NODE_ID, data.clock);
+                    this.value = data.value;
+                } else {
+                    this.uid = makeUUID();
+                    this.clock = new VectorClock(NODE_ID);
+                    this.value = "";
+                    dispatch(
+                        this.uid,
+                        this.clock.value(),
+                        '',
+                        'create',
+                    );
+                }
+            }
+            connectedCallback() {
+                this.setAttribute('uid', this.uid);
+                this.render();
+            }
+            update(data) {
+                if (this.clock.merge(data.clock)) {
+                    this.value = data.value;
+                    this.render();
+                }
+            }
+            render() {
+                this.innerHTML = `
+                        <input type="text" autocomplete="off" value="${this.value}" >
+                        <button>del</button>
+                    `;
+                this.querySelector('input').addEventListener('change', e => {
+                    this.clock.increment();
+                    dispatch(
+                        this.uid,
+                        this.clock.value(),
+                        e.target.value,
+                    );
+                });
+                this.querySelector('button').addEventListener('click', e => {
+                    dispatch(
+                        this.uid,
+                        this.clock.value(),
+                        '',
+                        'delete',
+                    );
+                    this.remove();
+                });
+            }
+        }
+        customElements.define('to-do', ToDoElement);
+
+        class VectorClock {
+            constructor(nodeId, clock = null) {
+                this.step = 0;
+                this.clock = {
+                    ...clock,
+                };
+                this.timestamp = Date.now();
+                this.nodeId = nodeId;
+                if (!(this.nodeId in this.clock)) {
+                    this.clock[nodeId] = [0, 0];
+                } else {
+                    this.step = this.clock[nodeId][0];
+                    this.timestamp = this.clock[nodeId][1];
+                }
+            }
+
+            increment() {
+                this.step++;
+                this.timestamp = Date.now();
+                this.clock[this.nodeId] = [this.step, this.timestamp];
+                return this;
+            }
+
+            merge(clock) {
+                const incoming = this.sum(clock);
+                const current = this.sum(this.clock);
+                console.log("merge", incoming, current, clock, {...this.clock});
+                if (incoming > current) {
+                    this.clock = clock;
+                    this.step = this.clock?.[this.nodeId]?.[0] ?? 0;
+                    return true;
+                }
+                else if (incoming === current){
+                    console.log('conflict');
+                    const incomingLastUpdate = this.lastUpdate(clock);
+                    const lastUpdate = this.lastUpdate(this.clock);
+                    if (incomingLastUpdate >= lastUpdate){
+                        this.clock = clock;
+                        this.step = this.clock?.[this.nodeId]?.[0] ?? 0;
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            value() {
+                return {
+                    ...this.clock,
+                };
+            }
+
+            sum(clock) {
+                let total = 0;
+                for (const nodeId in clock) {
+                    total += clock[nodeId][0];
+                }
+                return total;
+            }
+
+            lastUpdate(clock){
+                let last = 0;
+                for (const nodeId in clock) {
+                    const [step, timestamp] = clock[nodeId];
+                    if (timestamp > last) last = timestamp;
+                }
+                return last;
+            }
+        }
+    </script>
+</body>
+
+</html>
