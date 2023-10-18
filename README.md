@@ -14,6 +14,12 @@ node ./server.js
 
 4. Open `index.html` in a web browser.
 
+### Demo
+
+![CRDT based input updates](./demo-1.gif)
+
+![Offline support + conflict resolution with HLCs](./demo-2.gif)
+
 ### References
 
 - [An Interactive Intro to CRDTs](https://jakelazaroff.com/words/an-interactive-intro-to-crdts/)
