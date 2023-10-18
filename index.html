@@ -64,12 +64,25 @@
                     return;
             }
         });
+        async function reconnect(){
+            while (true){
+                console.log('retrying in 10s');
+                await new Promise(resolve => setTimeout(resolve, 10_000));
+                if (socket.readyState === 1){
+                    console.log('reconnected');
+                    break;
+                }
+                socket = new WebSocket('ws://localhost:8080');
+                await new Promise(resolve => setTimeout(resolve, 5_000));
+                if (socket.readyState === 1){
+                    console.log('reconnected');
+                    break;
+                }
+            }
+        }
         socket.addEventListener('close', e => {
             console.log('disconnected');
-            setTimeout(()=>{
-                console.log('reconnecting');
-                socket = new WebSocket('ws://localhost:8080');
-            }, 60_000);
+            reconnect();
         });
 
         function dispatch(uid, clock, value, type = 'update') {
