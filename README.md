@@ -21,3 +21,4 @@ node ./server.js
 - [A CRDT Primer Part II: Convergent CRDTs](https://blog.jtfmumm.com//2015/11/24/crdt-primer-2-convergent-crdts/)
 - [Eventual Consistency and Conflict Resolution - Part 2](https://www.mydistributed.systems/2022/02/eventual-consistency-part-2.html)
 - [Making CRDTs 98% More Efficient](https://jakelazaroff.com/words/making-crdts-98-percent-more-efficient)
+- [CRDTs: The Hard Parts (video)](https://www.youtube.com/watch?v=x7drE24geUw&t=3587s)
