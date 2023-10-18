@@ -211,9 +211,7 @@
                     this.clock.nodes = clock.nodes;
                 }
                 if (incoming > current) {
-                    for (let i = 0; i < clock.clock.length; i++){
-                        this.clock.clock[i] = clock.clock[i];
-                    }
+                    this.syncClocks(clock);
                     this.idx = this.clock.nodes.indexOf(this.nodeId);
                     if (this.idx !== -1) this.step = this.clock.clock[this.idx][0];
                     return true;
@@ -222,17 +220,25 @@
                     console.log('conflict');
                     const incomingLastUpdate = this.lastUpdate(clock);
                     const lastUpdate = this.lastUpdate(this.clock);
+                    this.syncClocks(clock);
                     if (incomingLastUpdate >= lastUpdate){
                         console.log('incoming wins');
-                        for (let i = 0; i < clock.clock.length; i++){
-                            this.clock.clock[i] = clock.clock[i];
-                        }
                         this.idx = this.clock.nodes.indexOf(this.nodeId);
                         if (this.idx !== -1) this.step = this.clock.clock[this.idx][0];
                         return true;
                     }
+                } else {
+                    this.syncClocks(clock);
                 }
                 return false;
+            }
+
+            syncClocks(clock){
+                for (let i = 0; i < clock.clock.length; i++){
+                    if (this.clock.clock[i] == undefined || this.clock.clock[i][0] < clock.clock[i][0]){
+                        this.clock.clock[i] = clock.clock[i];
+                    }
+                }
             }
 
             value() {
