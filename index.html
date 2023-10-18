@@ -99,6 +99,7 @@
                     this.uid = makeUUID();
                     this.clock = new VectorClock(NODE_ID);
                     this.value = "";
+                    this.clock.increment();
                     dispatch(
                         this.uid,
                         this.clock.value(),
@@ -147,22 +148,30 @@
             constructor(nodeId, clock = null) {
                 this.step = 0;
                 this.clock = {
-                    ...clock,
+                    nodes: [],
+                    clock: [],
                 };
+                if (clock != null) {
+                    this.clock = clock;
+                }
                 this.timestamp = Date.now();
                 this.nodeId = nodeId;
-                if (!(this.nodeId in this.clock)) {
-                    this.clock[nodeId] = [0, 0];
+                this.idx = this.clock.nodes.indexOf(this.nodeId);
+                if (this.idx === -1) {
+                    this.idx = this.clock.nodes.length;
+                    this.clock.nodes.push(nodeId);
+                    this.clock.clock.push([0, 0]);
                 } else {
-                    this.step = this.clock[nodeId][0];
-                    this.timestamp = this.clock[nodeId][1];
+                    this.step = this.clock.clock[this.idx][0];
+                    this.timestamp = this.clock.clock[this.idx][1];
                 }
+                console.log(this.idx);
             }
 
             increment() {
                 this.step++;
                 this.timestamp = Date.now();
-                this.clock[this.nodeId] = [this.step, this.timestamp];
+                this.clock.clock[this.idx] = [this.step, this.timestamp];
                 return this;
             }
 
@@ -170,9 +179,15 @@
                 const incoming = this.sum(clock);
                 const current = this.sum(this.clock);
                 console.log("merge", incoming, current, clock, {...this.clock});
+                if (clock.nodes.length > this.clock.nodes.length) {
+                    this.clock.nodes = clock.nodes;
+                }
                 if (incoming > current) {
-                    this.clock = clock;
-                    this.step = this.clock?.[this.nodeId]?.[0] ?? 0;
+                    for (let i = 0; i < clock.clock.length; i++){
+                        this.clock.clock[i] = clock.clock[i];
+                    }
+                    this.idx = this.clock.nodes.indexOf(this.nodeId);
+                    if (this.idx !== -1) this.step = this.clock.clock[this.idx][0];
                     return true;
                 }
                 else if (incoming === current){
@@ -180,8 +195,12 @@
                     const incomingLastUpdate = this.lastUpdate(clock);
                     const lastUpdate = this.lastUpdate(this.clock);
                     if (incomingLastUpdate >= lastUpdate){
-                        this.clock = clock;
-                        this.step = this.clock?.[this.nodeId]?.[0] ?? 0;
+                        console.log('incoming wins');
+                        for (let i = 0; i < clock.clock.length; i++){
+                            this.clock.clock[i] = clock.clock[i];
+                        }
+                        this.idx = this.clock.nodes.indexOf(this.nodeId);
+                        if (this.idx !== -1) this.step = this.clock.clock[this.idx][0];
                         return true;
                     }
                 }
@@ -196,16 +215,15 @@
 
             sum(clock) {
                 let total = 0;
-                for (const nodeId in clock) {
-                    total += clock[nodeId][0];
+                for (const [step, timestamp] of clock.clock) {
+                    total += step;
                 }
                 return total;
             }
 
             lastUpdate(clock){
                 let last = 0;
-                for (const nodeId in clock) {
-                    const [step, timestamp] = clock[nodeId];
+                for (const [step, timestamp] of clock.clock) {
                     if (timestamp > last) last = timestamp;
                 }
                 return last;
