@@ -170,11 +170,7 @@
                 this.timestamp = Date.now();
                 this.nodeId = nodeId;
                 this.idx = this.clock.nodes.indexOf(this.nodeId);
-                if (this.idx === -1) {
-                    this.idx = this.clock.nodes.length;
-                    this.clock.nodes.push(nodeId);
-                    this.clock.clock.push([0, 0]);
-                } else {
+                if (this.idx !== -1) {
                     this.step = this.clock.clock[this.idx][0];
                     this.timestamp = this.clock.clock[this.idx][1];
                 }
@@ -184,6 +180,10 @@
             increment() {
                 this.step++;
                 this.timestamp = Date.now();
+                if (this.idx === -1){
+                    this.idx = this.clock.nodes.length;
+                    this.clock.nodes[this.idx] = this.nodeId;
+                }
                 this.clock.clock[this.idx] = [this.step, this.timestamp];
                 return this;
             }
