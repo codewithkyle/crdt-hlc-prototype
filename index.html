@@ -21,10 +21,17 @@
             margin: 0;
             padding: 32px;
         }
+        fieldset{
+            margin-bottom: 16px;
+        }
     </style>
 </head>
 
 <body>
+    <fieldset>
+        <legend>Latency (ms)</legend>
+        <input type="number" id="latency" value="0" min="0" step="1">
+    </fieldset>
     <button id="add">Add TODO</button>
     <div id="todos"></div>
     <script type="module">
@@ -37,6 +44,12 @@
 
         const NODE_ID = localStorage.getItem('nodeId') || makeUUID();
         localStorage.setItem('nodeId', NODE_ID);
+
+        let LATENCY = 0;
+        const latency = document.getElementById('latency');
+        latency.addEventListener('change', e => {
+            LATENCY = parseInt(e.target.value);
+        });
 
         let offlineQueue = [];
 
@@ -91,7 +104,9 @@
                 offlineQueue.push({uid, clock, value, type});
                 return;
             }
-            socket.send(JSON.stringify({uid, clock, value, type}));
+            setTimeout(() => {
+                socket.send(JSON.stringify({uid, clock, value, type}));
+            }, LATENCY);
         }
 
         function makeUUID() {
@@ -221,9 +236,7 @@
             }
 
             value() {
-                return {
-                    ...this.clock,
-                };
+                return structuredClone(this.clock);
             }
 
             sum(clock) {
