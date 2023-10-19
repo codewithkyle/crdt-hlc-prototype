@@ -52,51 +52,47 @@
         });
 
         let offlineQueue = [];
-
-        let socket = new WebSocket('ws://localhost:8080');
-        socket.addEventListener('open', e => {
-            console.log('connected');
-            while (offlineQueue.length > 0) {
+        function flushOfflineQueue(){
+            while (offlineQueue.length > 0){
                 const {uid, clock, value, type} = offlineQueue.shift();
                 dispatch(uid, clock, value, type);
             }
-        });
-        socket.addEventListener('message', e => {
-            const data = JSON.parse(e.data);
-            const el = todos.querySelector(`[uid="${data.uid}"]`);
-            switch (data.type){
-                case 'create':
-                    const newTODO = new ToDoElement(data);
-                    todos.appendChild(newTODO);    
-                    break;
-                case 'delete':
-                    if (el) el.remove();
-                    return;
-                default:
-                    if (el) el.update(data);
-                    return;
-            }
-        });
-        async function reconnect(){
-            while (true){
-                console.log('retrying in 10s');
-                await new Promise(resolve => setTimeout(resolve, 10_000));
-                if (socket.readyState === 1){
-                    console.log('reconnected');
-                    break;
-                }
-                socket = new WebSocket('ws://localhost:8080');
-                await new Promise(resolve => setTimeout(resolve, 5_000));
-                if (socket.readyState === 1){
-                    console.log('reconnected');
-                    break;
-                }
-            }
         }
-        socket.addEventListener('close', e => {
-            console.log('disconnected');
-            reconnect();
-        });
+        let socket;
+        function connect(){
+            socket = new WebSocket('ws://localhost:8080');
+            socket.addEventListener('open', e => {
+                console.log('connected');
+                flushOfflineQueue();
+            });
+            socket.addEventListener('message', e => {
+                const data = JSON.parse(e.data);
+                const el = todos.querySelector(`[uid="${data.uid}"]`);
+                switch (data.type){
+                    case 'create':
+                        if (el) return;
+                        const newTODO = new ToDoElement(data);
+                        todos.appendChild(newTODO);    
+                        break;
+                    case 'delete':
+                        if (el) el.remove();
+                        return;
+                    default:
+                        if (el) el.update(data);
+                        return;
+                }
+            });
+            socket.addEventListener('close', e => {
+                console.log('disconnected');
+                reconnect();
+            });
+        }
+        connect();
+        async function reconnect(){
+            console.log('retrying in 10s');
+            await new Promise(resolve => setTimeout(resolve, 10_000));
+            connect();
+        }
 
         function dispatch(uid, clock, value, type = 'update') {
             if (socket.readyState !== 1) {
@@ -127,7 +123,7 @@
                     this.uid = makeUUID();
                     this.clock = new VectorClock(NODE_ID);
                     this.value = "";
-                    this.clock.increment();
+                    console.log("new");
                     dispatch(
                         this.uid,
                         this.clock.value(),
@@ -183,7 +179,7 @@
                     this.#clock = clock;
                 }
                 this.step = 0;
-                this.timestamp = Date.now();
+                this.timestamp = 0;
                 this.nodeId = nodeId;
                 this.idx = this.#clock.nodes.indexOf(this.nodeId);
                 if (this.idx !== -1) {
@@ -241,6 +237,7 @@
                 }
 
                 console.log("incoming contains fewer or older events");
+                this.syncClocks(clock);
                 
                 return false;
             }
@@ -256,6 +253,11 @@
                     this.#clock.clocks[i] = Math.max(this.#clock.clocks[i], clock.clocks[i]);
                     this.#clock.timestamps[i] = Math.max(this.#clock.timestamps[i], clock.timestamps[i]);
                 }
+                if (this.idx !== -1){
+                    this.step = this.#clock.clocks[this.idx];
+                    this.timestamp = this.#clock.timestamps[this.idx];
+                }
+                console.log("synced", structuredClone(this.#clock));
                 return this;
             }
 
