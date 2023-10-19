@@ -173,90 +173,103 @@
         customElements.define('to-do', ToDoElement);
 
         class VectorClock {
+            #clock = {
+                nodes: [],
+                clocks: [],
+                timestamps: [],
+            };
             constructor(nodeId, clock = null) {
-                this.step = 0;
-                this.clock = {
-                    nodes: [],
-                    clock: [],
-                };
                 if (clock != null) {
-                    this.clock = clock;
+                    this.#clock = clock;
                 }
+                this.step = 0;
                 this.timestamp = Date.now();
                 this.nodeId = nodeId;
-                this.idx = this.clock.nodes.indexOf(this.nodeId);
+                this.idx = this.#clock.nodes.indexOf(this.nodeId);
                 if (this.idx !== -1) {
-                    this.step = this.clock.clock[this.idx][0];
-                    this.timestamp = this.clock.clock[this.idx][1];
+                    this.step = this.#clock.clocks[this.idx];
+                    this.timestamp = this.#clock.timestamps[this.idx];
                 }
-                console.log(this.idx);
             }
 
             increment() {
                 this.step++;
                 this.timestamp = Date.now();
                 if (this.idx === -1){
-                    this.idx = this.clock.nodes.length;
-                    this.clock.nodes[this.idx] = this.nodeId;
+                    this.idx = this.#clock.nodes.length;
+                    this.#clock.nodes[this.idx] = this.nodeId;
                 }
-                this.clock.clock[this.idx] = [this.step, this.timestamp];
+                this.#clock.clocks[this.idx] = this.step;
+                this.#clock.timestamps[this.idx] = this.timestamp;
                 return this;
             }
 
             merge(clock) {
-                const incoming = this.sum(clock);
-                const current = this.sum(this.clock);
-                console.log("merge", incoming, current, clock, {...this.clock});
-                if (clock.nodes.length > this.clock.nodes.length) {
-                    this.clock.nodes = clock.nodes;
+
+                // Start with checking sum, bigger num wins
+                // If sum is equal check individual clocks, add diff to bigger clock, bigger diff wins
+                // If clocks are equal check timestamps, bigger timestamp wins
+
+                if (clock.nodes.length > this.#clock.nodes.length) {
+                    this.#clock.nodes = clock.nodes;
                 }
-                if (incoming > current) {
+                this.idx = this.#clock.nodes.indexOf(this.nodeId);
+
+                console.log("merge", clock, structuredClone(this.#clock));
+
+                let diff = 0;
+                for (let i = 0; i < clock.clocks.length; i++){
+                    if (this.#clock.clocks[i] == undefined || clock.clocks[i] > this.#clock.clocks[i]){
+                        diff++;
+                    }
+                    else if (clock.clocks[i] < this.#clock.clocks[i]){
+                        diff--;
+                    }
+                }
+                console.log(diff);
+                if (diff > 0){
+                    console.log("incoming contains more events");
                     this.syncClocks(clock);
-                    this.idx = this.clock.nodes.indexOf(this.nodeId);
-                    if (this.idx !== -1) this.step = this.clock.clock[this.idx][0];
                     return true;
                 }
-                else if (incoming === current){
-                    console.log('conflict');
-                    const incomingLastUpdate = this.lastUpdate(clock);
-                    const lastUpdate = this.lastUpdate(this.clock);
-                    this.syncClocks(clock);
-                    if (incomingLastUpdate >= lastUpdate){
-                        console.log('incoming wins');
-                        this.idx = this.clock.nodes.indexOf(this.nodeId);
-                        if (this.idx !== -1) this.step = this.clock.clock[this.idx][0];
+                if (diff === 0){
+                    const lastSeenUpdate = this.calcLastUpdateTimestamp(this.#clock);
+                    const incomingUpdate = this.calcLastUpdateTimestamp(clock);
+                    if (incomingUpdate > lastSeenUpdate){
+                        console.log("incoming contains newer events");
+                        this.syncClocks(clock);
                         return true;
                     }
-                } else {
-                    this.syncClocks(clock);
                 }
+
+                console.log("incoming contains fewer or older events");
+                
                 return false;
             }
 
             syncClocks(clock){
-                for (let i = 0; i < clock.clock.length; i++){
-                    if (this.clock.clock[i] == undefined || this.clock.clock[i][0] < clock.clock[i][0]){
-                        this.clock.clock[i] = clock.clock[i];
+                for (let i = 0; i < clock.clocks.length; i++){
+                    if (this.#clock.clocks[i] == undefined){
+                        this.#clock.clocks[i] = clock.clocks[i];
                     }
+                    if (this.#clock.timestamps[i] == undefined){
+                        this.#clock.timestamps[i] = clock.timestamps[i];
+                    }
+                    this.#clock.clocks[i] = Math.max(this.#clock.clocks[i], clock.clocks[i]);
+                    this.#clock.timestamps[i] = Math.max(this.#clock.timestamps[i], clock.timestamps[i]);
                 }
+                return this;
             }
 
             value() {
-                return structuredClone(this.clock);
+                this.increment();
+                return structuredClone(this.#clock);
             }
 
-            sum(clock) {
-                let total = 0;
-                for (const [step, timestamp] of clock.clock) {
-                    total += step;
-                }
-                return total;
-            }
-
-            lastUpdate(clock){
+            calcLastUpdateTimestamp(clock){
                 let last = 0;
-                for (const [step, timestamp] of clock.clock) {
-                    if (timestamp > last) last = timestamp;
+                for (const timestamp of clock.timestamps) {
+                    last = Math.max(last, timestamp);
                 }
                 return last;
             }
