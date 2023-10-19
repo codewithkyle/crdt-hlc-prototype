@@ -195,6 +195,7 @@
             increment() {
                 this.step++;
                 this.timestamp = Date.now();
+                this.idx = this.#clock.nodes.indexOf(this.nodeId);
                 if (this.idx === -1){
                     this.idx = this.#clock.nodes.length;
                     this.#clock.nodes[this.idx] = this.nodeId;
@@ -206,14 +207,11 @@
 
             merge(clock) {
 
-                // Start with checking sum, bigger num wins
-                // If sum is equal check individual clocks, add diff to bigger clock, bigger diff wins
-                // If clocks are equal check timestamps, bigger timestamp wins
+                // Diff clocks to see if the incoming clock has seen more updates
+                // If clocks are equal check timestamps, last timestamp wins
 
-                if (clock.nodes.length > this.#clock.nodes.length) {
-                    this.#clock.nodes = clock.nodes;
-                }
-                this.idx = this.#clock.nodes.indexOf(this.nodeId);
+                this.idx = clock.nodes.indexOf(this.nodeId);
+                this.#clock.nodes = clock.nodes;
 
                 console.log("merge", clock, structuredClone(this.#clock));
 
